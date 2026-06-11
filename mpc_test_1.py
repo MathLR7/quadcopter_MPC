@@ -10,11 +10,13 @@ import numpy as np
 import casadi as ca
 import time
 import matplotlib.pyplot as plt
+import pybullet as p
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
-
+from gym_pybullet_drones.envs.HoverAviary import HoverAviary
+from gym_pybullet_drones.utils.enums import DroneModel, Physics
 
 # PARAMETERS
 MASS = 0.0397  # kg
@@ -172,6 +174,7 @@ def map_to_cf_thrust(f_desired):
     return int((f_clamped / F_MAX) * 65535)
 
 class CrazyflieMPCControl:
+
     def __init__(self, uri):
         self.uri = uri
         self.mpc = QuadcopterMPC()
@@ -258,11 +261,131 @@ class CrazyflieMPCControl:
                     scf.cf.commander.send_setpoint(0, 0, 0, 0)
                     time.sleep(0.01)
 
+class PyBulletSim:
+    def __init__(self, env):
+        self.env = env
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw = 0.0
+        self.thrust = 0.0
+    
+    def apply_control(self, roll_rate, pitch_rate, yaw_rate, thrust):
+        self.roll_rate = roll_rate
+        self.pitch_rate = pitch_rate
+        self.yaw_rate = yaw_rate
+        self.thrust = thrust
+        
+    def step(self):
+        self.roll += self.roll_rate * DT
+        self.pitch += self.pitch_rate * DT
+        self.yaw += self.yaw_rate * DT
+
+        R = self._rotation_matrix(self.roll, self.pitch, self.yaw)
+
+        thrust = np.array([0, 0, self.thrust])
+        force_world = R @ thrust
+
+        p.applyExternalForce(
+            self.env.droneIds[0],
+            -1,
+            force_world.tolist(),
+            [0, 0, 0],
+            p.WORLD_FRAME
+        )
+
+        self.env.stepSimulation()
+    
+    def _rotation_matrix(self, roll, pitch, yaw):
+        cr, sr = np.cos(roll), np.sin(roll)
+        cp, sp = np.cos(pitch), np.sin(pitch)
+        cy, sy = np.cos(yaw), np.sin(yaw)
+
+        R = np.array([
+            [cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr],
+            [sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr],
+            [-sp, cp*sr, cp*cr]
+        ])
+        return R
+    
+    def get_state(self):
+        s = self.env._getDroneStateVector(0)
+
+        return {
+            "x": s[0],
+            "y": s[1],
+            "z": s[2],
+            "vx": s[10],
+            "vy": s[11],
+            "vz": s[12],
+            "ax": 0.0,
+            "ay": 0.0,
+            "az": 0.0
+        }
+    
+
+class SimulatedCrazyflie:
+    def __init__(self, sim):
+        self.sim = sim
+        self.commander = SimulatedCommander(sim)
+        self.log = SimulatedLogger(sim)
+        self.param = self._Param()
+
+    class _Param:
+        def set_value(self, k, v):
+            pass
+
+    def apply_control(self, roll_rate, pitch_rate, yaw_rate, thrust):
+        self.sim.apply_control(roll_rate, pitch_rate, yaw_rate, thrust)
+    
+    def step(self):
+        self.sim.step()
+        self.log.update()
+
+class SimulatedCommander:
+    def __init__(self, sim):
+        self.sim = sim  
+
+    def send_rate_setpoint(self, roll, pitch, yaw, thrust):
+        self.sim.apply_control(roll, pitch, yaw, thrust)
+
+    def send_setpoint(self, roll, pitch, yaw, thrust):
+        self.sim.apply_control(roll, pitch, yaw, thrust)
+
+
+class SimulatedLogger:
+    def __init__(self, sim):
+        self.sim = sim
+        self.callbacks = []
+
+    def add_config(self, logconf):
+        pass  
+
+    def add_callback(self, cb):
+        self.callbacks.append(cb)
+
+    def update(self):
+        state = self.sim.get_state()
+
+        data = {
+            "stateEstimate.x": state["x"],
+            "stateEstimate.y": state["y"],
+            "stateEstimate.z": state["z"],
+            "stateEstimate.vx": state["vx"],
+            "stateEstimate.vy": state["vy"],
+            "stateEstimate.vz": state["vz"],
+            "stateEstimate.ax": state["ax"],
+            "stateEstimate.ay": state["ay"],
+            "stateEstimate.az": state["az"],
+        }
+
+        for cb in self.callbacks:
+            cb(0, data, None)
+
 
 if __name__ == "__main__":
-    mode = "sim"  # ou "drone"
+    mode = "simPybullet" 
 
-    if mode == "sim":
+    if mode == "sim": # simplified simulation to see convergences, only tests MPC
         mpc = QuadcopterMPC()
 
         x0 = np.array([
@@ -311,6 +434,55 @@ if __name__ == "__main__":
         plt.grid()
         plt.legend()
         plt.show()
+
+    elif mode == "simPybullet":
+
+        env = HoverAviary(
+            drone_model=DroneModel.CF2X,
+            physics=Physics.PYB,
+            gui=True
+        )
+
+        sim_core = PyBulletSim(env)
+        cf = SimulatedCrazyflie(sim_core)
+
+        mpc = QuadcopterMPC()
+
+        target = np.array([
+            [1.0, 0, 0],
+            [0.15, 0, 0],
+            [1.0, 0, 0]
+        ])
+
+        obs, _ = env.reset()
+
+        while True:
+            state = cf.sim.get_state()
+
+            acc_plan, jerk_plan = mpc.solve(
+                np.array([state["x"], state["y"], state["z"]]),
+                target
+            )
+
+            if acc_plan is not None:
+                f_vec = acc_plan - np.array([0, 0, -G])
+                f_mag = np.linalg.norm(f_vec)
+
+                f_mag = max(f_mag, 1e-3)
+                roll_rate = -jerk_plan[1] / f_mag
+                pitch_rate = jerk_plan[0] / f_mag
+                thrust = f_mag
+
+                cf.commander.send_rate_setpoint(
+                    np.degrees(roll_rate),
+                    np.degrees(pitch_rate),
+                    0.0,
+                    thrust
+                )
+
+            cf.step()
+            sim_core.step()
+            time.sleep(DT)
 
     elif mode == "drone":
         URI = 'radio://0/80/2M/E7E7E7E7E7'
