@@ -3,8 +3,6 @@ import casadi as ca
 
 from configs.parameters import *
 
-J_MAX = (1 / np.sqrt(3)) * F_MIN * OMEGA_MAX
-
 class QuadcopterMPC:
     def __init__(self):
         self.N = N_STEPS

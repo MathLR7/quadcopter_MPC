@@ -6,6 +6,7 @@ import cflib.crtp
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.crazyflie.log import LogConfig
 
+from controllers.thrust_mapping import map_to_cf_thrust
 from controllers.mpc_controller import QuadcopterMPC
 from configs.parameters import *
 
