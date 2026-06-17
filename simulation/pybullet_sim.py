@@ -30,6 +30,10 @@ class PyBulletSim:
         self.pitch += self.pitch_rate * DT
         self.yaw += self.yaw_rate * DT
 
+        self.roll = np.clip(self.roll, -1.0, 1.0)
+        self.pitch = np.clip(self.pitch, -1.0, 1.0)
+        self.yaw = np.clip(self.yaw, -np.pi, np.pi)
+
         R = self._rotation_matrix(
             self.roll,
             self.pitch,
@@ -45,14 +49,13 @@ class PyBulletSim:
         force_world = R @ thrust
 
         p.applyExternalForce(
-            self.env.droneIds[0],
+            self.env.getDroneIds()[0],
             -1,
             force_world.tolist(),
             [0,0,0],
             p.WORLD_FRAME
         )
-
-        self.env.stepSimulation()
+        p.stepSimulation()
 
 
 
@@ -70,28 +73,26 @@ class PyBulletSim:
 
 
     def get_state(self):
-        s = self.env._getDroneStateVector(0)
 
-        v = np.array([
-            s[10],
-            s[11],
-            s[12]
-        ])
-        a = (v - self.prev_v)/DT
-        self.prev_v = v.copy()
+        pos, orn = p.getBasePositionAndOrientation(
+            self.env.getDroneIds()[0]
+        )
+
+        vel, ang_vel = p.getBaseVelocity(
+            self.env.getDroneIds()[0]
+        )
 
         return {
 
-            "x": s[0],
-            "y": s[1],
-            "z": s[2],
+            "x": pos[0],
+            "y": pos[1],
+            "z": pos[2],
 
-            "vx": v[0],
-            "vy": v[1],
-            "vz": v[2],
+            "vx": vel[0],
+            "vy": vel[1],
+            "vz": vel[2],
 
-            "ax": a[0],
-            "ay": a[1],
-            "az": a[2]
-
-        }
+            "ax": 0,
+            "ay": 0,
+            "az": 0
+    }

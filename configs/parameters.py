@@ -3,9 +3,9 @@ import numpy as np
 # Drone parameters
 MASS = 0.0397
 G = 9.81
-F_MAX = 14.82
-F_MIN = 4.0
-OMEGA_MAX = 10.0
+F_MAX = 20.0
+F_MIN = 5.0
+OMEGA_MAX = 25.0
 
 # MPC parameters
 DT = 0.02

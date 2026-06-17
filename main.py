@@ -12,7 +12,7 @@ from simulation.numerical_sim import run_numerical_sim
 
 
 if __name__ == "__main__":
-    mode = "numerical" 
+    mode = "pybullet" 
 
     if mode == "numerical": # simplified simulation to see convergences, only tests MPC
         run_numerical_sim()

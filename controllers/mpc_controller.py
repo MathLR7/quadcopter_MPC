@@ -69,7 +69,7 @@ class QuadcopterMPC:
 
         # Physical limits: Acceleration and Jerk constraints
         acc_min_z, acc_max_z = F_MIN - G, F_MAX - G
-        acc_lim_xy = 4.0
+        acc_lim_xy = 7.0
         for k in range(self.N + 1):
             self.opti.subject_to(self.opti.bounded(-acc_lim_xy, self.x[2, k], acc_lim_xy))
             self.opti.subject_to(self.opti.bounded(-acc_lim_xy, self.y[2, k], acc_lim_xy))

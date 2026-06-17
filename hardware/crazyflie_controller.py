@@ -28,13 +28,13 @@ class CrazyflieMPCControl:
         with SyncCrazyflie(self.uri) as scf:
             
             # Hard constraints on the cage in case the MPC code fails
-            scf.cf.param.set_value('geofence.minX', '-0.24')
-            scf.cf.param.set_value('geofence.maxX', '1.55')
-            scf.cf.param.set_value('geofence.minY', '-0.28')
-            scf.cf.param.set_value('geofence.maxY', '0.28')
-            scf.cf.param.set_value('geofence.minZ', '-0.05')
-            scf.cf.param.set_value('geofence.maxZ', '1.30')
-            scf.cf.param.set_value('geofence.enable', '1')
+            scf.cf.param.set_value('colAv.bboxMinX', '-0.24')
+            scf.cf.param.set_value('colAv.bboxMaxX', '1.55')
+            scf.cf.param.set_value('colAv.bboxMinY', '-0.28')
+            scf.cf.param.set_value('colAv.bboxMaxY', '0.28')
+            scf.cf.param.set_value('colAv.bboxMinZ', '-0.05')
+            scf.cf.param.set_value('colAv.bboxMaxZ', '1.30')
+            scf.cf.param.set_value('colAv.enable', '1')
 
             # Log configuration for onboard EKF
             logconf = LogConfig(name='State', period_in_ms=20)
@@ -59,20 +59,27 @@ class CrazyflieMPCControl:
 
                     if acc_plan is not None:
                         # Convert planned acceleration into thrust magnitude and direction
-                        f_vec = acc_plan - np.array([0, 0, -G])
+                        f_vec = acc_plan + np.array([0,0,G])
                         f_mag = np.linalg.norm(f_vec)
-
+                        if f_mag < 0.1:
+                            f_mag = 0.1
+  
                         # Map jerk and thrust to roll and pitch rate commands
                         roll_rate = -jerk_plan[1] / f_mag
                         pitch_rate = jerk_plan[0] / f_mag
-                        thrust = map_to_cf_thrust(f_mag)
+                        roll_rate = np.clip(roll_rate,-OMEGA_MAX,OMEGA_MAX)
+                        pitch_rate = np.clip(pitch_rate,-OMEGA_MAX,OMEGA_MAX)
+
+                        thrust_raw = map_to_cf_thrust(f_mag)
+                        thrust_percentage = (thrust_raw / 65535.0) * 100.0
                         
-                        scf.cf.commander.send_rate_setpoint(np.degrees(roll_rate), np.degrees(pitch_rate), 0.0, thrust)
+                        scf.cf.commander.send_setpoint_manual(np.degrees(roll_rate), np.degrees(pitch_rate), 0.0, thrust_percentage, True)
 
                     else:
                         # Hover fallback if solver fails
-                        thrust_hover = map_to_cf_thrust(MASS * G) 
-                        scf.cf.commander.send_rate_setpoint(0.0, 0.0, 0.0, thrust_hover)
+                        thrust_hover = map_to_cf_thrust(G)
+                        th_percentage = (thrust_hover / 65535.0) * 100.0
+                        scf.cf.commander.send_setpoint_manual(0.0, 0.0, 0.0, th_percentage, True)
                     
                     # Maintain the loop frequency based on DT
                     solve_time = time.time() - start_time
