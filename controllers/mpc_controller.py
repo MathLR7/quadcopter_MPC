@@ -62,7 +62,7 @@ class QuadcopterMPC:
         y_min, y_max = -0.25, 0.25  # cage limit y 
         z_min, z_max =  -0.05, 1.25  # cage limit Z
         
-        for k in range(self.N + 1):
+        for k in range(1, self.N + 1):
             self.opti.subject_to(self.opti.bounded(x_min, self.x[0, k], x_max))
             self.opti.subject_to(self.opti.bounded(y_min, self.y[0, k], y_max))
             self.opti.subject_to(self.opti.bounded(z_min, self.z[0, k], z_max))
@@ -70,7 +70,7 @@ class QuadcopterMPC:
         # Physical limits: Acceleration and Jerk constraints
         acc_min_z, acc_max_z = F_MIN - G, F_MAX - G
         acc_lim_xy = 7.0
-        for k in range(self.N + 1):
+        for k in range(1, self.N + 1):
             self.opti.subject_to(self.opti.bounded(-acc_lim_xy, self.x[2, k], acc_lim_xy))
             self.opti.subject_to(self.opti.bounded(-acc_lim_xy, self.y[2, k], acc_lim_xy))
             self.opti.subject_to(self.opti.bounded(acc_min_z, self.z[2, k], acc_max_z))
@@ -94,12 +94,12 @@ class QuadcopterMPC:
         
         try:
             sol = self.opti.solve()
-            # Return the next planned acceleration and jerk
             return (np.array([sol.value(self.x[2, 1]), sol.value(self.y[2, 1]), sol.value(self.z[2, 1])]),
                     np.array([sol.value(self.jx[0]), sol.value(self.jy[0]), sol.value(self.jz[0])]))
-        except:
+        except Exception as e:
+            print("\nSolver failed because of:")
+            self.opti.debug.show_infeasibilities()
             return None, None
-            # TODO: Handle solver failure (e.g., return hover command)
 
     def simulate(self, x0, target, sim_steps=100):
         x_hist = np.zeros((3, sim_steps+1))

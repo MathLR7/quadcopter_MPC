@@ -71,14 +71,14 @@ class CrazyflieMPCControl:
                         pitch_rate = np.clip(pitch_rate,-OMEGA_MAX,OMEGA_MAX)
 
                         thrust_raw = map_to_cf_thrust(f_mag)
-                        thrust_percentage = (thrust_raw / 65535.0) * 100.0
+                        thrust_percentage = (thrust_raw / MAX_COMMAND) * 100.0
                         
                         scf.cf.commander.send_setpoint_manual(np.degrees(roll_rate), np.degrees(pitch_rate), 0.0, thrust_percentage, True)
 
                     else:
                         # Hover fallback if solver fails
                         thrust_hover = map_to_cf_thrust(G)
-                        th_percentage = (thrust_hover / 65535.0) * 100.0
+                        th_percentage = (thrust_hover / MAX_COMMAND) * 100.0
                         scf.cf.commander.send_setpoint_manual(0.0, 0.0, 0.0, th_percentage, True)
                     
                     # Maintain the loop frequency based on DT

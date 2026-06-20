@@ -14,3 +14,7 @@ N_STEPS = int(T_HORIZON / DT)
 
 # Jerk limit
 J_MAX = (1 / np.sqrt(3)) * F_MIN * OMEGA_MAX
+
+# Thrust measurements from documentation
+MAX_THRUST_NEWTONS = 1.275 
+MAX_COMMAND = 65535.0

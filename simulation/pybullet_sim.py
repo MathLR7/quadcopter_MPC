@@ -26,9 +26,9 @@ class PyBulletSim:
 
 
     def step(self):
-        self.roll += self.roll_rate * DT
-        self.pitch += self.pitch_rate * DT
-        self.yaw += self.yaw_rate * DT
+        self.roll += np.radians(self.roll_rate) * DT
+        self.pitch += np.radians(self.pitch_rate) * DT
+        self.yaw += np.radians(self.yaw_rate) * DT
 
         self.roll = np.clip(self.roll, -1.0, 1.0)
         self.pitch = np.clip(self.pitch, -1.0, 1.0)
@@ -48,11 +48,13 @@ class PyBulletSim:
 
         force_world = R @ thrust
 
+        pos, _ = p.getBasePositionAndOrientation(self.env.getDroneIds()[0])
+        
         p.applyExternalForce(
             self.env.getDroneIds()[0],
             -1,
             force_world.tolist(),
-            [0,0,0],
+            pos, 
             p.WORLD_FRAME
         )
         p.stepSimulation()
@@ -82,8 +84,11 @@ class PyBulletSim:
             self.env.getDroneIds()[0]
         )
 
-        return {
+        current_vel = np.array(vel)
+        acc = (current_vel - self.prev_v) / DT
+        self.prev_v = current_vel
 
+        return {
             "x": pos[0],
             "y": pos[1],
             "z": pos[2],
@@ -92,7 +97,7 @@ class PyBulletSim:
             "vy": vel[1],
             "vz": vel[2],
 
-            "ax": 0,
-            "ay": 0,
-            "az": 0
-    }
+            "ax": acc[0],
+            "ay": acc[1],
+            "az": acc[2]
+        }

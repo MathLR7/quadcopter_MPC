@@ -8,7 +8,7 @@ from controllers.mpc_controller import QuadcopterMPC
 from simulation.pybullet_sim import PyBulletSim
 from simulation.simulated_cf import SimulatedCrazyflie
 
-from configs.parameters import DT, G, MASS
+from configs.parameters import DT, G, MASS, OMEGA_MAX
 from configs.targets import DEFAULT_TARGET
 
 def run_pybullet_sim():
@@ -36,12 +36,12 @@ def run_pybullet_sim():
     }
 
     
-    target = np.array([
-        [initial_state[0],0,0],
-        [initial_state[1],0,0],
-        [z_hover,0,0]
-    ])
-    #target = DEFAULT_TARGET
+    # target = np.array([
+    #     [initial_state[0],0,0],
+    #     [initial_state[1],0,0],
+    #     [z_hover,0,0]
+    # ])
+    target = DEFAULT_TARGET
 
     while True:
 
@@ -58,51 +58,53 @@ def run_pybullet_sim():
         if acc_plan is not None:
             desired_acc = acc_plan
 
-            f_mag = MASS * np.linalg.norm(
-                desired_acc + np.array([0,0,G])
-            )
+            f_acc = np.linalg.norm(desired_acc + np.array([0,0,G]))
+            f_acc = max(f_acc, 1e-3)
 
-            f_mag = max(f_mag,1e-3)
-
-            roll_rate = -jerk_plan[1]/f_mag
-            pitch_rate = jerk_plan[0]/f_mag
-            roll_rate = np.clip(roll_rate, -2, 2)
-            pitch_rate = np.clip(pitch_rate, -2, 2)
+            roll_rate = -jerk_plan[1]/f_acc
+            pitch_rate = jerk_plan[0]/f_acc
+            
+            roll_rate = np.clip(roll_rate, -OMEGA_MAX, OMEGA_MAX)
+            pitch_rate = np.clip(pitch_rate, -OMEGA_MAX, OMEGA_MAX)
 
             roll_cmd = np.degrees(roll_rate)
             pitch_cmd = np.degrees(pitch_rate)
 
+            thrust_newtons = MASS * f_acc
+
             last_command["roll"] = roll_cmd
             last_command["pitch"] = pitch_cmd
             last_command["yaw"] = 0
-            last_command["thrust"] = f_mag
+            last_command["thrust"] = thrust_newtons
 
             print(
-                "pos:",
-                state["x"],
-                state["y"],
-                state["z"],
-                "vel:",
-                state["vz"],
-                "thrust:",
-                f_mag
+                "pos: {:.2f} {:.2f} {:.2f} |".format(state["x"], state["y"], state["z"]),
+                "vel z: {:.2f} |".format(state["vz"]),
+                "thrust (N): {:.3f}".format(thrust_newtons)
             )
-            thrust = MASS * (G + acc_plan[2])
 
             cf.commander.send_rate_setpoint(
                 roll_cmd,
                 pitch_cmd,
                 0,
-                thrust
+                thrust_newtons
             )
 
         else:
 
+            # cf.commander.send_rate_setpoint(
+            #     last_command["roll"],
+            #     last_command["pitch"],
+            #     last_command["yaw"],
+            #     last_command["thrust"]
+            # )
+
+            print("Fallback activated, MPC failed")
             cf.commander.send_rate_setpoint(
-                last_command["roll"],
-                last_command["pitch"],
-                last_command["yaw"],
-                last_command["thrust"]
+                0.0, 
+                0.0, 
+                0.0, 
+                MASS * G 
             )
 
         cf.step()
