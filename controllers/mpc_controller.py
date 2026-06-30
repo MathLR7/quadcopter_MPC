@@ -39,8 +39,30 @@ class QuadcopterMPC:
         self.target_z = self.opti.parameter(3, 1)
 
         # Cost Function: Minimum Jerk Trajectory
+        Rj = 10
+        cost = Rj * (
+            ca.sumsqr(self.jx)
+            + ca.sumsqr(self.jy)
+            + ca.sumsqr(self.jz)
+        )
+        #cost = ca.sumsqr(self.jx) + ca.sumsqr(self.jy) + ca.sumsqr(self.jz) 
+        Qp = 1000
+        Qv = 10
+        Qa = 10
 
-        cost = ca.sumsqr(self.jx) + ca.sumsqr(self.jy) + ca.sumsqr(self.jz)
+        for i in range(self.N+1):
+            cost += Qp*(self.target_x[0]-self.x[0,i])**2
+            cost += Qv*(self.target_x[1]-self.x[1,i])**2
+            cost += Qa*(self.target_x[2]-self.x[2,i])**2
+
+            cost += Qp*(self.target_y[0]-self.y[0,i])**2
+            cost += Qv*(self.target_y[1]-self.y[1,i])**2
+            cost += Qa*(self.target_y[2]-self.y[2,i])**2
+
+            cost += Qp*(self.target_z[0]-self.z[0,i])**2
+            cost += Qv*(self.target_z[1]-self.z[1,i])**2
+            cost += Qa*(self.target_z[2]-self.z[2,i])**2
+            
         self.opti.minimize(cost)
 
         # Dynamics Constraints
@@ -53,9 +75,9 @@ class QuadcopterMPC:
         self.opti.subject_to(self.x[:, 0] == self.z0_x)
         self.opti.subject_to(self.y[:, 0] == self.z0_y)
         self.opti.subject_to(self.z[:, 0] == self.z0_z)
-        self.opti.subject_to(self.x[:, self.N] == self.target_x)
-        self.opti.subject_to(self.y[:, self.N] == self.target_y)
-        self.opti.subject_to(self.z[:, self.N] == self.target_z)
+        # self.opti.subject_to(self.x[:, self.N] == self.target_x)
+        # self.opti.subject_to(self.y[:, self.N] == self.target_y)
+        # self.opti.subject_to(self.z[:, self.N] == self.target_z)
 
         # Limits (Inequality Constraints)
         x_min, x_max = -0.22, 1.53  # cage limit X 
@@ -80,7 +102,13 @@ class QuadcopterMPC:
             self.opti.subject_to(self.opti.bounded(-J_MAX, self.jz[k], J_MAX))
 
         # Configure solver settings (silence output for real-time performance)
-        opts = {'ipopt.print_level': 0, 'print_time': 0, 'ipopt.max_iter': 100}
+        opts = {
+            'ipopt.print_level': 0,
+            'print_time': 0,
+            'ipopt.max_iter': 100,
+            'ipopt.tol': 1e-6,
+            'ipopt.constr_viol_tol': 1e-6
+        }
         self.opti.solver('ipopt', opts)
 
     def solve(self, current_state, target_state):
@@ -97,6 +125,7 @@ class QuadcopterMPC:
             return (np.array([sol.value(self.x[2, 1]), sol.value(self.y[2, 1]), sol.value(self.z[2, 1])]),
                     np.array([sol.value(self.jx[0]), sol.value(self.jy[0]), sol.value(self.jz[0])]))
         except Exception as e:
+            print(e)
             print("\nSolver failed because of:")
             self.opti.debug.show_infeasibilities()
             return None, None

@@ -8,14 +8,15 @@ by minimizing control effort (jerk) while enforcing strict terminal state constr
 
 from hardware.crazyflie_controller import CrazyflieMPCControl
 from simulation.pybullet_runner import run_pybullet_sim
-from simulation.numerical_sim import run_numerical_sim
+from simulation.numerical_sim import run_numerical_sim, plot_results
 
 
 if __name__ == "__main__":
-    mode = "pybullet" 
+    mode = "numerical" 
 
-    if mode == "numerical": # simplified simulation to see convergences, only tests MPC
-        run_numerical_sim()
+    if mode == "numerical": 
+        xh, yh,zh,jh = run_numerical_sim()
+        plot_results(xh,yh,zh,jh)
 
     elif mode == "pybullet":
         run_pybullet_sim()
