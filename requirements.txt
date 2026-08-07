@@ -1,5 +1,0 @@
-casadi==3.7.2
-cflib==0.1.32
-matplotlib==3.11.0
-numpy==2.5.0
-pybullet==3.2.7
